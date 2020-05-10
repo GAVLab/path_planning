@@ -86,13 +86,16 @@ classdef AStarBicycle2Dof < simulation.actors.Bicycle2Dof
             end
             obj.timings_(end+1) = toc;
             
+            
+            
             for i = 1 : numel(path)
                node = path{i};
                map(node.row, node.col) = 1;
             end
             
-            
-            
+            figure (1)
+            imagesc(flipud(map(1:100, 1:100)))
+            pause(0.01)
             
             % Pure Pursuit Control
             
@@ -122,6 +125,7 @@ classdef AStarBicycle2Dof < simulation.actors.Bicycle2Dof
             elseif phiFinal < -obj.steerLimit_
                 phiFinal = - obj.steerLimit_;
             end
+            
             
             obj.state_.steerAngle = phiFinal;
         end
@@ -161,8 +165,8 @@ classdef AStarBicycle2Dof < simulation.actors.Bicycle2Dof
                 yGlobal = actors{i}.yGlobal;
                 
                 [row, col] = world.coordsToIdx([xGlobal, yGlobal]);
-                for k = -1*obj.safetyRadius_*world.gridResolution_ : 1 : 1*obj.safetyRadius_*world.gridResolution_
-                    for j = -1*obj.safetyRadius_*world.gridResolution_ : 1 : 1*obj.safetyRadius_*world.gridResolution_
+                for k = -2*obj.safetyRadius_ : 1 : 2*obj.safetyRadius_
+                    for j = -2*obj.safetyRadius_ : 1 : 2*obj.safetyRadius_
                         newRow = row + k;
                         newCol = col + j;
                         
@@ -182,7 +186,7 @@ classdef AStarBicycle2Dof < simulation.actors.Bicycle2Dof
                 yPosCovar = covar(i, 3);
                 
                 var = max([xPosCovar, yPosCovar]);
-                boxDim = round(obj.safetyRadius_ + 3 * sqrt(var)) * world.gridResolution_;
+                boxDim = round(obj.safetyRadius_ + 3 * sqrt(var));
                 
                 [row, col] = world.coordsToIdx([xPos; yPos]);
                 
@@ -197,7 +201,6 @@ classdef AStarBicycle2Dof < simulation.actors.Bicycle2Dof
                     end
                 end
             end
-            
             
             %% Build needed data
             startNode.row = actorRow;
@@ -277,8 +280,8 @@ classdef AStarBicycle2Dof < simulation.actors.Bicycle2Dof
                     
                 end % for each neighbor in neighbors
                 map(actorRow, actorCol) = 1;
-                imagesc(flipud(map(1:50, 1:50)))
-                pause(0.000001)
+                %imagesc(map)
+                %pause(0.000001)
                 
             end % while cells left to explore
             warning("No valid path!")

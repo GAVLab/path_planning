@@ -1,8 +1,15 @@
-function [world] = buildWorld3FTG()
-%BUILDWORLD2 Summary of this function goes here
-%   Detailed explanation goes here
+function [world] = buildWorld1AStar()
 
-import simulation.*
+%{
+This simulation has a FTG bicycle try to get around an oscillating
+obstacle.
+%}
+
+import simulation.World;
+import simulation.actors.AbstractActor;
+import simulation.actors.DummyActor;
+import simulation.actors.Bicycle2Dof;
+import simulation.actors.FTGBicycle2Dof;
 
 % Build map
 gridResolution = 2; % pixels per meter
@@ -11,10 +18,9 @@ gridWidth = 100;
 
 
 %% Build dumb bicycle
-
 clear initialState;
-initialState.position = [10; 10];
-initialState.orientation = pi/8;
+initialState.position = [1; 11];
+initialState.orientation = pi/4;
 
 initialState.lonVel = 10;
 initialState.latVel = 0;
@@ -33,9 +39,8 @@ dumbBicycle1 = simulation.actors.Bicycle2Dof(initialState, 2);
 disp("Actor: 2DOF Bicycle")
 disp("Location: (3,3)");
 
-%% Build dumb bicycle
 clear initialState;
-initialState.position = [3,3];
+initialState.position = [11; 1];
 initialState.orientation = pi/4;
 
 initialState.lonVel = 10;
@@ -54,7 +59,8 @@ dumbBicycle2 = simulation.actors.Bicycle2Dof(initialState, 3);
 
 disp("Actor: 2DOF Bicycle")
 disp("Location: (3,3)");
-%% Build A* Bicycle
+
+%% Build FTG Bicycle
 clear initialState;
 initialState.position = [1; 1];
 initialState.orientation = pi/4;
@@ -69,16 +75,18 @@ initialState.velocity(1) = ...
 initialState.velocity(2) = ...
     initialState.lonVel * sin(initialState.orientation) - ...
     initialState.latVel * cos(initialState.orientation);
+initialState.steerAngle = 0;
 
 goal = [35; 25];
 
-ftgBicycle = simulation.actors.FTGBicycle2Dof(initialState, 1, goal);
+astarBicycle = simulation.actors.AStarBicycle2Dof(initialState, 1, goal);
 
 disp("Actor: A* Bicycle")
 disp("Location: (1,1)")
 
 %% Build world
-world = simulation.World(gridWidth, gridHeight, gridResolution, {dumbBicycle1, dumbBicycle2, ftgBicycle});
+world = simulation.World(gridWidth, gridHeight, gridResolution, {dumbBicycle1, dumbBicycle2, astarBicycle});
+%world = simulation.World(gridWidth, gridHeight, gridResolution, {dumbBicycle, ftgBicycle});
 
 end
 

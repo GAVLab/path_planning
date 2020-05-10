@@ -1,11 +1,11 @@
-function [world] = buildWorld3AStar()
+function [world] = buildWorld2FTG()
 %BUILDWORLD2 Summary of this function goes here
 %   Detailed explanation goes here
 
 import simulation.*
 
 % Build map
-gridResolution = 1; % pixels per meter
+gridResolution = 2; % pixels per meter
 gridHeight = 100;
 gridWidth = 100;
 
@@ -35,7 +35,7 @@ disp("Location: (3,3)");
 
 %% Build dumb bicycle
 clear initialState;
-initialState.position = [3; 3];
+initialState.position = [3,3];
 initialState.orientation = pi/4;
 
 initialState.lonVel = 10;
@@ -53,7 +53,7 @@ initialState.steerAngle = 0;
 dumbBicycle2 = simulation.actors.Bicycle2Dof(initialState, 3);
 
 disp("Actor: 2DOF Bicycle")
-disp("Location: (5,15)");
+disp("Location: (3,3)");
 %% Build A* Bicycle
 clear initialState;
 initialState.position = [1; 1];
@@ -72,13 +72,13 @@ initialState.velocity(2) = ...
 
 goal = [35; 25];
 
-astarBicycle = simulation.actors.AStarBicycle2Dof(initialState, 1, goal);
+ftgBicycle = simulation.actors.FTGBicycle2Dof(initialState, 1, goal);
 
 disp("Actor: A* Bicycle")
 disp("Location: (1,1)")
 
 %% Build world
-world = simulation.World(gridWidth, gridHeight, gridResolution, {dumbBicycle1, dumbBicycle2, astarBicycle});
+world = simulation.World(gridWidth, gridHeight, gridResolution, {dumbBicycle1, dumbBicycle2, ftgBicycle});
 
 end
 

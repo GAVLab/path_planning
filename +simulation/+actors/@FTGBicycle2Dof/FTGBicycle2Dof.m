@@ -205,16 +205,15 @@ classdef FTGBicycle2Dof < simulation.actors.Bicycle2Dof
             obj.timings_(end+1) = toc;
             obj.state_.steerAngle = phiFinal;
 
-            gap_array(round(goalHeading) + 180 + 1) = 2;
+            gap_array(round(goalHeading) + 180 + 1) = -1;
             
             %size(gap_array)
-            gap_array(round(rad2deg(phiFinal)) + 180 + 1) = 3;
+            gap_array(round(rad2deg(phiFinal)) + 180 + 1) = -3;
             rad2deg(phiFinal)
             size(gap_array)
             try
                 plot([-180 : 1 : 180], gap_array(1:361));
                 set(gca, 'XDir', 'reverse');
-                pause(0.01)
             catch
                 size(gap_array)
             end

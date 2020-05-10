@@ -5,7 +5,7 @@ function [world] = buildWorld2AStar()
 import simulation.*
 
 % Build map
-gridResolution = 1; % pixels per meter
+gridResolution = 2; % pixels per meter
 gridHeight = 100;
 gridWidth = 100;
 
