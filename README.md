@@ -1,7 +1,7 @@
 # MECH7710 Path Planning
 
 Project for MECH7710 - Optimal Estimation implementing trajectory replanning methods for controlling a vehicle towards a goal in the presence of other vehicles.
-Vehicle Parameters are from a 2003 Infiniti G35
+Vehicle Parameters are from a 2003 Infiniti G35.
 
 ## Methods to Implement
 - [x] [A*](https://en.wikipedia.org/wiki/A*_search_algorithm)
@@ -19,9 +19,9 @@ Vehicle Parameters are from a 2003 Infiniti G35
     1. motion model class (currently a bicycle model)
     2. Filtering class (basic kalman filter estimating remote vehicle's orientation and yaw rate)
     3. Navigation class (currently uses Follow-the-gap (FTG) or A*)
-- Simualtion can contain N number of vehicles, each with different components and goal destinations
+- Simulation can contain N number of vehicles, each with different components and goal destinations
 
 ### How to run
 - demo.m runs the whole simulation
-- buildWrold() is where the vehicles and goal locations are created
+- buildWorld() is where the vehicles and goal locations are created
 - FilterClass stores all process and sensor noise values, as well as a generic vehicle model
