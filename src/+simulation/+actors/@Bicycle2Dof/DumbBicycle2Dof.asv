@@ -1,0 +1,108 @@
+classdef DumbBicycle2Dof < simulation.actors.AbstractActor
+    %BICYCLE2DOF Summary of this class goes here
+    %   Detailed explanation goes here
+    
+    properties
+        % Unique identifier
+        id_
+        
+        % Core state variables
+        state_ % : Struct holding state variables
+        %{
+        These are in global and are used by the world:
+        position
+        velocity
+        orientation
+        
+        These are specific to the bicycle model:
+        yawRate
+        latVel
+        lonVel
+        
+        %}
+        
+        caf %corner stiffness front
+        car %corner stiffness rear
+        
+        L %length of wheel base
+        a %distance from cg to front axle
+        b %distance from cg to rear axle
+        
+        Iz %yaw inertia
+        m %vehicle mass
+        
+        c0
+        c1
+        c2
+    end
+    
+    methods
+        function obj = DumbBicycle2Dof(initialState)
+            %BICYCLE2DOF Construct an instance of this class
+            %   Detailed explanation goes here
+            obj.state_ = initialState;
+            
+            % BUILD PARAMS
+            obj.caf = 2*4.5837e+004; %corner stiffness front
+            obj.car = 2*7.6394e+004; %corner stiffness rear
+            
+            obj.L = 2.8499;%length of wheel base
+            obj.a = .48 * obj.L;%distance from cg to front axle
+            obj.b = .52 * obj.L;%distance from cg to rear axle
+            
+            obj.Iz = 2400; %yaw inertia
+            obj.m = 1528.2; %vehicle mass
+            
+            %handling characteristics
+            obj.c0 = obj.caf + obj.car;
+            obj.c1 = obj.a * obj.caf - obj.b * obj.car;
+            obj.c2 = obj.a^2 * obj.caf + obj.b^2 * obj.car;
+            
+        end
+        
+        function obj = applyMotionModel(obj, input, dt)
+            %APPLYMOTIONMODEL Update the state of the actor
+            
+            velMag = sqrt(obj.state_.latVel^2 + obj.state_.lonVel^2);
+            
+            a11 =  -obj.c2 / (obj.Iz * obj.state_.lonVel);
+            a12 =  -obj.c1 / (obj.Iz * obj.state_.lonVel);
+            a21 = (-obj.c1 / (obj.m  * obj.state_.lonVel)) - velMag;
+            a22 =  -obj.c0 / (obj.m  * obj.state_.lonVel);
+            A = [a11, a12; a21, a22];
+            
+            b11 = obj.a   * obj.caf / obj.Iz;
+            b21 = obj.caf / obj.m;
+            B = [b11; b21];
+            
+            % I'm not going to discretize but that wouldn't be a bad
+            % idea...
+            xDot = A * [obj.state_.yawRate; obj.state_.latVel] + B * input;
+            yawAccel = xDot(1);
+            latAccel = xDot(2);
+            
+            obj.state_.yawRate = obj.state_.yawRate + yawAccel * dt;
+            obj.state_.latVel = obj.state_.latVel + latAccel * dt;
+            obj.state_.orientation = ... 
+                obj.state_.orientation + obj.state_.yawRate * dt;
+            
+            obj.state_.velocity(1) = ... 
+                obj.state_.lonVel * sin(obj.state_.orientation) + ...
+                obj.state_.latVel * cos(obj.state_.orientation);
+            obj.state_.velocity(2) = ...
+                obj.state_.lonVel * cos(obj.state_.orientation) - ...
+                obj.state_.latVel * sin(obj.state_.orientation);
+            
+            obj.state_.position(1) = ...
+                obj.state_.position(1) + dt * obj.state_.velocity(1)
+            obj.state_.position(2) = ...
+                obj.state_.position(2) + dt * obj.state_.velocity(2);
+        end
+        
+        function u = calculateControlInput(obj, world, dt)
+            %CALCULATECONTROLINPUT
+            u = 0;
+        end
+    end
+end
+

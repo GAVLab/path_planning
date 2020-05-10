@@ -1,0 +1,259 @@
+classdef FilterClass < handle
+    %FILTERCLASS Summary of this class goes here
+    %   Detailed explanation goes here
+    
+    properties
+        %noise statistics of the sensors
+        gyroBias;
+        gyroScaleFactor;
+        gyroStdv;
+        drtkStdv;
+        gpsVelStdv;
+        headingStdv;
+        remStates;
+    end
+    
+    methods
+        
+        function obj = FilterClass()
+            %FILTERCLASS Construct an instance of this class
+            %   Detailed explanation goes here
+            obj.remStates = cell(1,100);
+            obj.headingStdv = .08;
+            obj.gyroBias = .25;
+            obj.gyroScaleFactor = 1;
+            obj.gyroStdv = .35;
+            obj.drtkStdv = .03;
+            obj.gpsVelStdv = .03;            
+        end
+                 
+        function performUpdate(obj,world,id_,dt)
+            for i = 1:length(world.actors_)
+                if isempty(world.actors_{i})
+                    continue
+                end
+                if id_ ~= world.actors_{i}.id_
+                    if isempty(obj.remStates{world.actors_{i}.id_})
+                        obj.initRemoteStates(world.actors_{i}.id_,world);
+                    end
+                    
+                    obj.timeUpdate(world.actors_{i}.id_,dt);
+                    modVal1 = mod(world.actors_{i}.time_,.1);
+                    modVal2 = mod(world.actors_{i}.time_,.01);
+                    %fprintf('ModVal: %5.2f\n',modVal)
+                    
+                    if modVal1 == 0 || modVal1 < 1e-2
+                        obj.measUpdate2hz(world,world.actors_{i}.id_,id_);
+                        
+                    elseif modVal2 == 0 || modVal2 < 1e-2
+                        obj.measUpdate20hz(world,world.actors_{i}.id_,id_);
+                        
+                    else
+                        %do nothing
+                    end
+                end
+            end
+            
+        end
+        
+        function timeUpdate(obj,actorId_,dt)
+            [stm,Bd] = obj.genSTM(actorId_,dt);
+            %update covariance
+            
+            obj.remStates{actorId_}.P = stm*obj.remStates{actorId_}.P*stm' + obj.remStates{actorId_}.Qd;
+            %previous states
+            states = [obj.remStates{actorId_}.yawRate;obj.remStates{actorId_}.latVel;obj.remStates{actorId_}.longVel;obj.remStates{actorId_}.heading;...
+                      obj.remStates{actorId_}.xGlobal;obj.remStates{actorId_}.yGlobal;obj.remStates{actorId_}.gyroSF;obj.remStates{actorId_}.gyroBias];
+            %update states
+            propStates = stm*states + Bd*obj.remStates{actorId_}.steerAngle*(180/pi);
+            
+            obj.remStates{actorId_}.yawRate = propStates(1);
+            obj.remStates{actorId_}.latVel = propStates(2);
+            obj.remStates{actorId_}.longVel = propStates(3);
+            obj.remStates{actorId_}.heading = propStates(4);
+            obj.remStates{actorId_}.xGlobal = propStates(5);
+            obj.remStates{actorId_}.yGlobal = propStates(6);
+            obj.remStates{actorId_}.gyroSF = propStates(7);
+            obj.remStates{actorId_}.gyroBias = propStates(8);
+            
+        end
+        
+        function measUpdate2hz(obj,world,actorId_,platId)
+            updateTime = .5;
+            
+            xPriori = [obj.remStates{actorId_}.yawRate;obj.remStates{actorId_}.latVel;obj.remStates{actorId_}.longVel;obj.remStates{actorId_}.heading;...
+             obj.remStates{actorId_}.xGlobal;obj.remStates{actorId_}.yGlobal;obj.remStates{actorId_}.gyroSF;obj.remStates{actorId_}.gyroBias];
+            
+            %measurement matrix
+            cMat2 = obj.genCmat(obj.remStates{actorId_}.yawRate,obj.remStates{actorId_}.gyroSF,updateTime);
+            
+            %kalman gain
+            kGain = obj.remStates{actorId_}.P*cMat2'*inv(cMat2*obj.remStates{actorId_}.P*cMat2' + obj.remStates{actorId_}.R1);
+            
+            %add simulated noise
+            yawRateMeas = obj.gyroScaleFactor*world.actors_{actorId_}.state_.yawRate + obj.gyroBias + obj.gyroStdv*randn();
+            latVelMeas = world.actors_{actorId_}.state_.latVel + obj.gpsVelStdv*randn();
+            longVelMeas = world.actors_{actorId_}.state_.lonVel + obj.gpsVelStdv*randn();
+            headingMeas = (world.actors_{actorId_}.state_.orientation) + obj.headingStdv*randn();
+            Xdrtk = (world.actors_{actorId_}.state_.position(1) + obj.drtkStdv*randn());% - world.actors_{platId}.state_.position(1)) + obj.drtkStdv*randn();
+            Ydrtk = (world.actors_{actorId_}.state_.position(2) + obj.drtkStdv*randn());% - world.actors_{platId}.state_.position(2)) + obj.drtkStdv*randn();
+            %measurement matrix
+            y = [yawRateMeas; latVelMeas; longVelMeas; headingMeas; Xdrtk; Ydrtk];
+            
+            updatedStates = xPriori + kGain*(y - cMat2*xPriori);
+            
+            obj.remStates{actorId_}.yawRate = updatedStates(1);
+            obj.remStates{actorId_}.latVel = updatedStates(2);
+            obj.remStates{actorId_}.longVel = updatedStates(3);
+            obj.remStates{actorId_}.heading = updatedStates(4);
+            obj.remStates{actorId_}.xGlobal = updatedStates(5);
+            obj.remStates{actorId_}.yGlobal = updatedStates(6);
+            obj.remStates{actorId_}.gyroSF = updatedStates(7);
+            obj.remStates{actorId_}.gyroBias = updatedStates(8);            
+         
+            obj.remStates{actorId_}.P = (eye(8) - kGain*cMat2)*obj.remStates{actorId_}.P;
+
+        end
+  
+        function measUpdate20hz(obj,world,actorId_,platId)
+            updateTime = .05;
+            
+            [stm,Bd] = obj.genSTM(actorId_,updateTime);
+            
+            xPriori = [obj.remStates{actorId_}.yawRate;obj.remStates{actorId_}.latVel;obj.remStates{actorId_}.longVel;obj.remStates{actorId_}.heading;...
+             obj.remStates{actorId_}.xGlobal;obj.remStates{actorId_}.yGlobal;obj.remStates{actorId_}.gyroSF;obj.remStates{actorId_}.gyroBias];
+            
+            %measurement matrix
+            cMat2 = obj.genCmat(obj.remStates{actorId_}.yawRate,obj.remStates{actorId_}.gyroSF,updateTime);
+            
+            %kalman gain
+            kGain = obj.remStates{actorId_}.P*cMat2'*inv(cMat2*obj.remStates{actorId_}.P*cMat2' + obj.remStates{actorId_}.R2);
+            
+            %add simulated noise
+            yawRateMeas = obj.gyroScaleFactor*world.actors_{actorId_}.state_.yawRate + obj.gyroBias + obj.gyroStdv*randn();
+            headingMeas = (world.actors_{actorId_}.state_.orientation) + obj.headingStdv*randn();
+
+            %measurement matrix
+            y = [yawRateMeas; headingMeas];
+            
+            updatedStates = xPriori + kGain*(y - cMat2*xPriori);
+            
+            obj.remStates{actorId_}.yawRate = updatedStates(1);
+            obj.remStates{actorId_}.latVel = updatedStates(2);
+            obj.remStates{actorId_}.longVel = updatedStates(3);
+            obj.remStates{actorId_}.heading = updatedStates(4);
+            obj.remStates{actorId_}.xGlobal = updatedStates(5);
+            obj.remStates{actorId_}.yGlobal = updatedStates(6);
+            obj.remStates{actorId_}.gyroSF = updatedStates(7);
+            obj.remStates{actorId_}.gyroBias = updatedStates(8); 
+            
+            obj.remStates{actorId_}.hist(1,length(obj.remStates{actorId_}.hist(1,:))+1) = updatedStates(1);
+            
+            obj.remStates{actorId_}.P = (eye(8) - kGain*cMat2)*obj.remStates{actorId_}.P;
+        end
+        
+        function [pos,posCovar] = predictForward(obj,world,id_)
+            predictionTime = .5; %seconds
+            for i = 1:length(world.actors_)
+                if isempty(world.actors_{i})
+                    continue
+                end
+                
+                if id_ ~= world.actors_{i}.id_
+                    [stm,Bd] = obj.genSTM(world.actors_{i}.id_,predictionTime);
+                     states = [obj.remStates{world.actors_{i}.id_}.yawRate;obj.remStates{world.actors_{i}.id_}.latVel;obj.remStates{world.actors_{i}.id_}.longVel;obj.remStates{world.actors_{i}.id_}.heading;...
+                      obj.remStates{world.actors_{i}.id_}.xGlobal;obj.remStates{world.actors_{i}.id_}.yGlobal;obj.remStates{world.actors_{i}.id_}.gyroSF;obj.remStates{world.actors_{i}.id_}.gyroBias];
+                    %update states
+                    propStates = stm*states + Bd*obj.remStates{world.actors_{i}.id_}.steerAngle*(180/pi);
+                    covarProp = stm*obj.remStates{world.actors_{i}.id_}.P*stm' + obj.remStates{world.actors_{i}.id_}.Qd;
+                    pos(i,1) = world.actors_{i}.id_;
+                    pos(i,2) = propStates(5);
+                    pos(i,3) = propStates(6);
+                    posCovar(i,1) = world.actors_{i}.id_;
+                    posCovar(i,2) = covarProp(5,5);
+                    posCovar(i,3) = covarProp(6,6);
+                    
+                end
+            end
+        end
+        
+        function initRemoteStates(obj,id_,world)
+            obj.remStates{id_}.yawRate = world.actors_{id_}.state_.yawRate(1);
+            obj.remStates{id_}.latVel = -world.actors_{id_}.state_.latVel(1);
+            obj.remStates{id_}.longVel = world.actors_{id_}.state_.lonVel(1);
+            obj.remStates{id_}.heading = ((pi/2) - world.actors_{id_}.state_.orientation(1));
+            obj.remStates{id_}.xGlobal = world.actors_{id_}.state_.position(1);
+            obj.remStates{id_}.yGlobal = world.actors_{id_}.state_.position(2);
+            obj.remStates{id_}.gyroSF = 0;
+            obj.remStates{id_}.gyroBias = 0;
+            obj.remStates{id_}.steerAngle = world.actors_{id_}.state_.steerAngle;
+            obj.remStates{id_}.P = diag([10 3 10 10 10 10 15 15]);
+            obj.remStates{id_}.Qd = diag([6.5e-5,0.00050,0.050,0.0050,5.00e-02,5.0e-02,5.0e-12,5.00e-12]);
+            obj.remStates{id_}.R1 = diag([1e-2 1e-4 1e-5 1e-1 1e-8 1e-8]);
+            obj.remStates{id_}.R2 = diag([1e-2 1e-3]);
+            obj.remStates{id_}.hist = 0;
+        end
+        
+        function cMat =  genCmat(obj,yawRate,a,updateTime);
+           if updateTime == .05
+                cMat = [a 0 0 0 0 0 yawRate 1;...
+                        0 0 0 1 0 0 0 0];
+            end
+            if updateTime == .5
+                cMat = [a 0 0 0 0 0 yawRate 1;...
+                        0 1 0 0 0 0 0 0;...
+                        0 0 1 0 0 0 0 0;...
+                        0 0 0 1 0 0 0 0;...
+                        0 0 0 0 1 0 0 0;...
+                        0 0 0 0 0 1 0 0];
+            end  
+        end
+        
+        function [stm,Bd] = genSTM(obj,actorId_,dt)
+            longVel = obj.remStates{actorId_}.longVel;
+            latVel = obj.remStates{actorId_}.latVel;
+           %define vehicle parameters (g35 vehicle parameters)
+            caf = 2*4.5837e+004; %corner stiffness front
+            car = 2*7.6394e+004; %corner stiffness rear
+
+            L = 2.8499;%length of wheel base
+            a = .48*L;%distance from cg to front axle
+            b =  .52*L;%distance from cg to rear axle
+
+            Iz = 2400; %yaww inertia
+            m = 1528.2; %vehicle mass
+
+            %handling characteristics
+            c0 = caf + car;
+            c1 = a*caf - b*car;
+            c2 = a^2*caf + b^2*car;
+
+            %components of the A matrix
+            a11 = -c2 / (Iz*longVel);
+            a12 = -c1 / (Iz*longVel);
+            a21 = (-c1 / (m*longVel)) - longVel;
+            a22 = -c0 / (m*longVel);
+            
+            Iz = 2400; %yaww inertia
+            m = 1528.2; %vehicle mass
+
+            b11 = (a*caf / Iz);
+            b22 = caf / m;
+
+            B = [b11 b22 0 0 0 0 0 0]';
+
+            A = [ a11 a12 0 0 0 0 0 0; ...
+                  a21 a22 0 0 0 0 0 0; ...
+                  0 0 0 0 0 0 0 0;...
+                  1 0 0 0 0 0 0 0;...
+                  0 0 1 -latVel 0 0 0 0;...
+                  0 1 0 longVel 0 0 0 0;...
+                  0 0 0 0 0 0 0 0;...
+                  0 0 0 0 0 0 0 0];
+
+            stm = eye(8) + A*dt; 
+            Bd = B*dt;
+        end 
+    end
+end
+
